@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -70,11 +71,17 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   void initState() {
+    switchOnBluetooth();
+    super.initState();
+  }
+
+  bool switchOnBluetooth() {
     if (widget.state != BluetoothState.on) {
       FlutterBluePlus.instance.turnOn();
-      print("checking bluetooth is on");
+      return true;
+    } else {
+      return false;
     }
-    super.initState();
   }
 
   void startBluetoothScan() {
@@ -99,60 +106,119 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  StreamBuilder<List<BluetoothDevice>> streamBluetoothList() {
+    print("checking sbBTDS");
+    return StreamBuilder(
+      stream: Stream.periodic(const Duration(seconds: 2))
+          .asyncMap((_) => FlutterBluePlus.instance.connectedDevices),
+      builder: (c, snapshot) => Column(
+        children: snapshot.data!
+            .map((device) => ListTile(
+                  title: Text(device.name),
+                  subtitle: Text(device.id.toString()),
+                  trailing: StreamBuilder<BluetoothDeviceState>(
+                    stream: device.state,
+                    initialData: BluetoothDeviceState.disconnected,
+                    builder: (c, snapshot) {
+                      print("checking snapshot.data == ${snapshot.data}");
+                      if (snapshot.data == BluetoothDeviceState.connected) {
+                        return ElevatedButton(
+                            child: const Text('OPEN'), onPressed: () {}
+
+                            // => Navigator.of(context).push(
+                            // MaterialPageRoute(
+                            //     builder: (context) =>
+                            //         DeviceScreen(device: device))),
+                            );
+                      }
+                      return Text(snapshot.data.toString());
+                    },
+                  ),
+                ))
+            .toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          Expanded(
-            child: StreamBuilder<List<ScanResult>>(
-              stream: FlutterBluePlus.instance.scanResults,
-              initialData: [], // Provide an empty list as the initial data
-              builder: (context, snapshot) {
-                if (snapshot.hasData) {
-                  List<ScanResult>? scanResults = snapshot.data;
-                  // Use the scanResults list as needed
-                  return ListView.builder(
-                    itemCount: scanResults!.length,
-                    itemBuilder: (context, index) {
-                      ScanResult result = scanResults[index];
-                      return ListTile(
-                        title: ElevatedButton(
-                          onPressed: () async {
-                            List<BluetoothService> services = await device.discoverServices();
-                            services.forEach((service) {
-                              // do something with service
-                              print("checking service == ${service}");
-                            });
-
-                          },
-                          child: Text(result.device.name.isEmpty
-                              ? '-'
-                              : result.device.name),
-                        ),
-                        subtitle: Text('RSSI: ${result.rssi}'),
-                      );
-                    },
-                  );
-                } else {
-                  return const Text("No Data");
+    return SafeArea(
+      child: Scaffold(
+        body: Column(
+          mainAxisSize: MainAxisSize.max,
+          children: <Widget>[
+            Center(
+              child: widget.state == BluetoothState.on
+                  ? Icon(
+                      Icons.bluetooth,
+                      color: Colors.green,
+                      size: 100,
+                    )
+                  : Icon(
+                      Icons.bluetooth_disabled,
+                      color: Colors.red,
+                      size: 100,
+                    ),
+            ),
+            Expanded(
+              child: StreamBuilder<List<ScanResult>>(
+                stream: FlutterBluePlus.instance.scanResults,
+                initialData: [], // Provide an empty list as the initial data
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    List<ScanResult>? scanResults = snapshot.data;
+                    // Use the scanResults list as needed
+                    return ListView.builder(
+                      itemCount: scanResults!.length,
+                      itemBuilder: (context, index) {
+                        ScanResult result = scanResults[index];
+                        return result.device.name.isNotEmpty
+                            ? ListTile(
+                                title: ElevatedButton(
+                                  onPressed: () async {},
+                                  child: Text(result.device.name.isEmpty
+                                      ? '-'
+                                      : result.device.name),
+                                ),
+                                subtitle:
+                                    Text('device id: ${result.device.type}'),
+                              )
+                            : Text('test: ${result.rssi}');
+                      },
+                    );
+                  } else {
+                    return const Text("No Data");
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        floatingActionButton: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            FloatingActionButton(
+              onPressed: () {
+                // sbBTDS();
+              },
+              tooltip: 'Stream',
+              child: Icon(Icons.search),
+            ),
+            FloatingActionButton(
+              onPressed: () {
+                if (widget.state != BluetoothState.on) {
+                  FlutterBluePlus.instance.turnOn();
+                  print("checking bluetooth is on");
+                } else if (!isScanning) {
+                  startBluetoothScan();
                 }
               },
+              tooltip: 'Bluetooth',
+              child:
+                  Icon(isScanning ? Icons.bluetooth_disabled : Icons.bluetooth),
             ),
-          ),
-
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (!isScanning) {
-            startBluetoothScan();
-          }
-        },
-        tooltip: 'Bluetooth',
-        child: Icon(isScanning ? Icons.bluetooth_disabled : Icons.bluetooth),
+          ],
+        ),
       ),
     );
   }
